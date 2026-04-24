@@ -1,10 +1,5 @@
 FROM node:22-alpine AS builder
 
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ENV HTTP_PROXY=$HTTP_PROXY
-ENV HTTPS_PROXY=$HTTPS_PROXY
-
 # NEXT_PUBLIC_* vars are inlined at build time — must be a build arg
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
