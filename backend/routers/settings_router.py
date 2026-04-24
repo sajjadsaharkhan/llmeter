@@ -4,10 +4,21 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
 from passlib.context import CryptContext
+import os
 
+from config import settings as app_config
 from database import get_session
 from models.settings import AppSettings
 from routers.auth import get_current_user
+
+
+def _db_size_bytes() -> int:
+    # Strip driver prefix: "sqlite+aiosqlite:///./data/llmeter.db" → "./data/llmeter.db"
+    path = app_config.database_url.split("///", 1)[-1]
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -23,6 +34,7 @@ class SettingsResponse(BaseModel):
     usd_to_toman_rate: float
     proxy_base_url: str
     require_proxy_auth: bool
+    db_size_bytes: int
 
 
 class SettingsUpdate(BaseModel):
@@ -60,6 +72,7 @@ async def get_settings(
         usd_to_toman_rate=s.usd_to_toman_rate or 0.0,
         proxy_base_url=s.proxy_base_url or "",
         require_proxy_auth=bool(s.require_proxy_auth),
+        db_size_bytes=_db_size_bytes(),
     )
 
 
@@ -89,6 +102,7 @@ async def update_settings(
         usd_to_toman_rate=s.usd_to_toman_rate or 0.0,
         proxy_base_url=s.proxy_base_url or "",
         require_proxy_auth=bool(s.require_proxy_auth),
+        db_size_bytes=_db_size_bytes(),
     )
 
 

@@ -1,13 +1,20 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, case
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
 from database import get_session
 from models.request_log import RequestLog
+from models.settings import AppSettings
 from routers.auth import get_current_user
+
+
+def _to_display(usd: float, currency: str, rate: float) -> float:
+    if currency == "IRT" and rate > 0:
+        return round(usd * rate, 2)
+    return round(usd, 6)
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -51,12 +58,13 @@ class PaginatedLogs(BaseModel):
 
 
 class LogSummary(BaseModel):
+    currency: str
     total_requests: int
     ok_requests: int
     error_requests: int
     error_rate: float
-    total_cost_usd: float
-    avg_cost_per_request: float
+    total_cost: float
+    avg_cost: float
     avg_latency_ms: float
     avg_ttfb_ms: float
     total_prompt_tokens: int
@@ -80,8 +88,26 @@ async def get_logs_summary(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(get_current_user),
 ):
-    # Build the base query with all filters
-    q = select(RequestLog)
+    settings = (await session.execute(
+        select(AppSettings).where(AppSettings.id == 1)
+    )).scalar_one_or_none()
+    currency = (settings.default_currency or "USD") if settings else "USD"
+    rate = (settings.usd_to_toman_rate or 0.0) if settings else 0.0
+    dc = lambda usd: _to_display(usd, currency, rate)
+
+    q = select(
+        func.count().label("total_requests"),
+        func.sum(
+            case((RequestLog.status_code.between(200, 299), 1), else_=0)
+        ).label("ok_requests"),
+        func.sum(RequestLog.cost_usd).label("total_cost_usd"),
+        func.avg(RequestLog.latency_ms).label("avg_latency_ms"),
+        func.avg(RequestLog.ttfb_ms).label("avg_ttfb_ms"),
+        func.sum(RequestLog.prompt_tokens).label("total_prompt_tokens"),
+        func.sum(RequestLog.completion_tokens).label("total_completion_tokens"),
+        func.sum(RequestLog.cache_tokens).label("total_cache_tokens"),
+        func.sum(RequestLog.total_tokens).label("total_tokens"),
+    ).select_from(RequestLog)
 
     if provider:
         q = q.where(RequestLog.provider_name == provider)
@@ -103,35 +129,27 @@ async def get_logs_summary(
             RequestLog.request_id.contains(search) | RequestLog.model_used.contains(search)
         )
 
-    # Execute query and get all matching rows
-    result = await session.execute(q)
-    logs = result.scalars().all()
+    row = (await session.execute(q)).one()
 
-    # Calculate aggregates in Python
-    total = len(logs)
-    ok = sum(1 for log in logs if 200 <= log.status_code < 300)
+    total = row.total_requests or 0
+    ok = row.ok_requests or 0
     err = total - ok
-    total_cost = sum(log.cost_usd for log in logs)
-    total_latency = sum(log.latency_ms for log in logs)
-    total_ttfb = sum(log.ttfb_ms for log in logs)
-    total_prompt = sum(log.prompt_tokens for log in logs)
-    total_completion = sum(log.completion_tokens for log in logs)
-    total_cache = sum(log.cache_tokens for log in logs)
-    total_tokens = sum(log.total_tokens for log in logs)
+    total_cost_usd = row.total_cost_usd or 0.0
 
     return LogSummary(
+        currency=currency,
         total_requests=total,
         ok_requests=ok,
         error_requests=err,
         error_rate=round(err / total * 100, 2) if total > 0 else 0.0,
-        total_cost_usd=total_cost,
-        avg_cost_per_request=round(total_cost / total, 6) if total > 0 else 0.0,
-        avg_latency_ms=round(total_latency / total) if total > 0 else 0,
-        avg_ttfb_ms=round(total_ttfb / total) if total > 0 else 0,
-        total_prompt_tokens=total_prompt,
-        total_completion_tokens=total_completion,
-        total_cache_tokens=total_cache,
-        total_tokens=total_tokens,
+        total_cost=dc(total_cost_usd),
+        avg_cost=dc(total_cost_usd / total) if total > 0 else 0.0,
+        avg_latency_ms=round(row.avg_latency_ms or 0),
+        avg_ttfb_ms=round(row.avg_ttfb_ms or 0),
+        total_prompt_tokens=row.total_prompt_tokens or 0,
+        total_completion_tokens=row.total_completion_tokens or 0,
+        total_cache_tokens=row.total_cache_tokens or 0,
+        total_tokens=row.total_tokens or 0,
     )
 
 

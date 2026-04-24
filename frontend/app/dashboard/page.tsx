@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Activity, DollarSign, Clock, Zap, AlertTriangle, TrendingUp, TrendingDown, type LucideIcon } from "lucide-react";
+import { RefreshCw, Activity, DollarSign, Clock, Zap, AlertTriangle, Layers, TrendingUp, TrendingDown, type LucideIcon } from "lucide-react";
 import { Topbar } from "@/components/shell/Sidebar";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Skeleton, DateTimeRangePicker, InfoTip } from "@/components/ui";
 import { AreaChart, StackedBarChart, HorizontalBars, Sparkline, providerColor } from "@/components/charts";
-import { api, type AnalyticsSummary, type AppSettings } from "@/lib/api";
-import { fmtNum, fmtMs, fmtCost } from "@/lib/utils";
+import { api, type AnalyticsSummary } from "@/lib/api";
+import { fmtNum, fmtMs, fmtToman, fmtUSD } from "@/lib/utils";
 
 const KPI_INFO = {
   requests: "Count of successfully proxied requests across every enabled provider in the selected period.",
@@ -13,6 +13,7 @@ const KPI_INFO = {
   latency: "Server-side total: time from LLMeter receiving the request to the final byte being sent back. p95 shown as reference.",
   ttfb: "Time to First Byte. Measured from when LLMeter dispatches the upstream request until the first chunk arrives.",
   error: "Percentage of requests that returned a 4xx or 5xx status, including rate limits after all retries are exhausted.",
+  tokens: "Total tokens consumed across all requests in the period. Prompt + cache + completion tokens combined.",
 };
 
 function mkSpark(seed: number, n = 20) {
@@ -72,18 +73,21 @@ export default function DashboardPage() {
     return { start, end, preset: "Last 30 days" };
   });
   const [data, setData] = useState<AnalyticsSummary | null>(null);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const currency = settings?.default_currency || "USD";
-  const rate = settings?.usd_to_toman_rate || 0;
-  const fc = (n: number) => fmtCost(n, currency, rate);
-  const currencyLabel = currency === "IRT" ? "T" : "$";
+  const fc = (n: number) => data?.currency === "IRT" ? fmtToman(n) : fmtUSD(n);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await api.getAnalytics(range.start.toISOString(), range.end.toISOString());
+      // Re-anchor relative presets to now on every call so auto-refresh stays current
+      let from = range.start;
+      let to = range.end;
+      if (range.preset !== "Custom") {
+        to = new Date();
+        from = new Date(to.getTime() - (range.end.getTime() - range.start.getTime()));
+      }
+      const result = await api.getAnalytics(from.toISOString(), to.toISOString());
       setData(result);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -96,8 +100,6 @@ export default function DashboardPage() {
     const id = setInterval(() => load(), 15000);
     return () => clearInterval(id);
   }, [load]);
-
-  useEffect(() => { api.getSettings().then(setSettings).catch(() => {}); }, []);
 
   return (
     <>
@@ -115,16 +117,17 @@ export default function DashboardPage() {
       <div className="p-4 md:p-6 flex flex-col gap-5 max-w-[1400px]">
         {/* KPI Cards */}
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[112px]" />)}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[112px]" />)}
           </div>
         ) : data ? (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KPICard icon={Activity} label="Total requests" value={fmtNum(data.total_requests)} delta={data.delta_requests} sub="vs previous period" info={KPI_INFO.requests} sparkData={mkSpark(1)} sparkColor="oklch(0.55 0.19 290)" />
-            <KPICard icon={DollarSign} label={`Total cost (${currency})`} value={fc(data.total_cost_usd)} delta={data.delta_cost} deltaInvert sub="vs previous period" info={KPI_INFO.cost} sparkData={mkSpark(2)} sparkColor="oklch(0.60 0.12 195)" />
+            <KPICard icon={DollarSign} label={`Total cost (${data.currency})`} value={fc(data.total_cost)} delta={data.delta_cost} deltaInvert sub="vs previous period" info={KPI_INFO.cost} sparkData={mkSpark(2)} sparkColor="oklch(0.60 0.12 195)" />
             <KPICard icon={Clock} label="Avg latency" value={fmtMs(data.avg_latency_ms)} delta={data.delta_latency} deltaInvert sub={`p95 ${fmtMs(data.p95_latency_ms)}`} info={KPI_INFO.latency} sparkData={mkSpark(3)} sparkColor="oklch(0.72 0.15 70)" />
             <KPICard icon={Zap} label="Avg TTFB" value={fmtMs(data.avg_ttfb_ms)} delta={data.delta_ttfb} deltaInvert sub={`p95 ${fmtMs(data.p95_ttfb_ms)}`} info={KPI_INFO.ttfb} sparkData={mkSpark(4)} sparkColor="oklch(0.55 0.01 260)" />
             <KPICard icon={AlertTriangle} label="Error rate" value={data.error_rate.toFixed(2) + "%"} delta={data.delta_error_rate} deltaInvert sub={`${fmtNum(data.error_count)} errors`} info={KPI_INFO.error} sparkData={mkSpark(5)} sparkColor="oklch(0.60 0.18 15)" />
+            <KPICard icon={Layers} label="Total tokens" value={fmtNum(data.total_tokens)} sub={`${fmtNum(data.total_prompt_tokens)} prompt · ${fmtNum(data.total_completion_tokens)} completion`} info={KPI_INFO.tokens} sparkData={mkSpark(6)} sparkColor="oklch(0.55 0.15 330)" />
           </div>
         ) : null}
 

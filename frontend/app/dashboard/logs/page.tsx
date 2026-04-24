@@ -219,6 +219,8 @@ export default function LogsPage() {
   const currency = settings?.default_currency || "USD";
   const rate = settings?.usd_to_toman_rate || 0;
   const fc = (n: number, d?: number) => fmtCost(n, currency, rate, d);
+  // Summary values are already converted by the backend — just pick the right formatter
+  const fmtSumCost = (n: number) => summary?.currency === "IRT" ? fmtToman(n) : fmtUSD(n);
 
   const bulkIds = useMemo(() => {
     const seen = new Set<string>();
@@ -239,13 +241,20 @@ export default function LogsPage() {
         setTotal(res.total);
         setSummary(null);
       } else {
+        // Re-anchor relative presets to now on every call so the window stays current
+        let from = range.start;
+        let to = range.end;
+        if (range.preset !== "Custom") {
+          to = new Date();
+          from = new Date(to.getTime() - (range.end.getTime() - range.start.getTime()));
+        }
         const params = {
           page, limit: perPage,
           provider: provider !== "All" ? provider : undefined,
           model: model !== "All" ? model : undefined,
           status: status !== "All" ? status : undefined,
-          from_time: range.start.toISOString(),
-          to_time: range.end.toISOString(),
+          from_time: from.toISOString(),
+          to_time: to.toISOString(),
           search: search || undefined,
         };
         const [logsRes, summaryRes] = await Promise.all([
@@ -261,12 +270,6 @@ export default function LogsPage() {
   }, [page, perPage, provider, model, status, range, search, bulkMode, bulkIds]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Auto-refresh every 15 seconds
-  useEffect(() => {
-    const id = setInterval(() => load(), 15000);
-    return () => clearInterval(id);
-  }, [load]);
 
   useEffect(() => {
     api.getProviders().then((ps) => setProviders(ps.map((p) => p.name))).catch(() => {});
@@ -388,7 +391,7 @@ export default function LogsPage() {
               {summary && (
                 <>
                   <span>{fmtNum(summary.total_requests)} req</span><span>·</span>
-                  <span>{fc(summary.total_cost_usd)}</span><span>·</span>
+                  <span>{fmtSumCost(summary.total_cost)}</span><span>·</span>
                   <span>avg {fmtMs(summary.avg_latency_ms)}</span>
                 </>
               )}
@@ -398,7 +401,7 @@ export default function LogsPage() {
             <div className="border-t border-border grid grid-cols-2 md:grid-cols-6 divide-y md:divide-y-0 md:divide-x divide-border bg-muted/20">
               {[
                 { label: "Requests", value: fmtNum(summary.total_requests), sub: <span><span className="text-emerald-600">{fmtNum(summary.ok_requests)} ok</span> · <span className="text-red-600">{fmtNum(summary.error_requests)} err</span></span> },
-                { label: "Total cost", value: fc(summary.total_cost_usd), sub: summary.total_requests > 0 ? `avg ${fc(summary.avg_cost_per_request, 6)} / req` : "—" },
+                { label: "Total cost", value: fmtSumCost(summary.total_cost), sub: summary.total_requests > 0 ? `avg ${fmtSumCost(summary.avg_cost)} / req` : "—" },
                 { label: "Avg latency", value: fmtMs(summary.avg_latency_ms), sub: null },
                 { label: "Avg TTFB", value: fmtMs(summary.avg_ttfb_ms), sub: null },
                 { label: "Total tokens", value: fmtNum(summary.total_tokens), sub: <span>{fmtNum(summary.total_prompt_tokens)} prompt · {fmtNum(summary.total_completion_tokens)} completion</span> },

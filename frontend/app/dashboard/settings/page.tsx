@@ -5,6 +5,13 @@ import { Topbar } from "@/components/shell/Sidebar";
 import { Card, CardContent, Input, Label, Select, Dialog, Switch, useToast, Skeleton } from "@/components/ui";
 import { api, type AppSettings } from "@/lib/api";
 
+function fmtBytes(b: number): string {
+  if (b >= 1_073_741_824) return (b / 1_073_741_824).toFixed(2) + " GB";
+  if (b >= 1_048_576) return (b / 1_048_576).toFixed(1) + " MB";
+  if (b >= 1_024) return (b / 1_024).toFixed(0) + " KB";
+  return b + " B";
+}
+
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[10.5px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 pt-1">
@@ -236,7 +243,7 @@ export default function SettingsPage() {
               footer={<SaveBtn onClick={saveRetention} />}>
               <div className="flex items-baseline justify-between mb-2">
                 <Label>Retain for <span className="font-mono text-foreground font-semibold">{retention} days</span></Label>
-                <div className="text-[10.5px] text-muted-foreground tabular-nums">~{(retention * 0.6).toFixed(1)} GB est.</div>
+                {settings && <div className="text-[10.5px] text-muted-foreground tabular-nums">Database: <span className="font-mono text-foreground">{fmtBytes(settings.db_size_bytes)}</span></div>}
               </div>
               <input type="range" min="1" max="365" value={retention} onChange={(e) => setRetention(parseInt(e.target.value))} className="w-full" />
               <div className="mt-1 flex justify-between text-[10px] font-mono text-muted-foreground">

@@ -200,12 +200,13 @@ export interface PaginatedLogs {
 }
 
 export interface LogSummary {
+  currency: string;
   total_requests: number;
   ok_requests: number;
   error_requests: number;
   error_rate: number;
-  total_cost_usd: number;
-  avg_cost_per_request: number;
+  total_cost: number;
+  avg_cost: number;
   avg_latency_ms: number;
   avg_ttfb_ms: number;
   total_prompt_tokens: number;
@@ -226,15 +227,20 @@ export interface LogsParams {
 }
 
 export interface AnalyticsSummary {
+  currency: string;
   total_requests: number;
-  total_cost_usd: number;
-  avg_cost_per_req: number;
+  total_cost: number;
+  avg_cost: number;
   avg_latency_ms: number;
   p95_latency_ms: number;
   avg_ttfb_ms: number;
   p95_ttfb_ms: number;
   error_rate: number;
   error_count: number;
+  total_tokens: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_cache_tokens: number;
   delta_requests: number;
   delta_cost: number;
   delta_latency: number;
@@ -262,6 +268,7 @@ export interface AppSettings {
   usd_to_toman_rate: number;
   proxy_base_url: string;
   require_proxy_auth: boolean;
+  db_size_bytes: number;
 }
 
 export interface ApiToken {
