@@ -80,6 +80,7 @@ async def get_logs_summary(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(get_current_user),
 ):
+    # Build the base query with all filters
     q = select(RequestLog)
 
     if provider:
@@ -102,40 +103,21 @@ async def get_logs_summary(
             RequestLog.request_id.contains(search) | RequestLog.model_used.contains(search)
         )
 
-    # Count total, ok, and errors
-    total_result = await session.execute(select(func.count()).select_from(q.subquery()))
-    total = total_result.scalar() or 0
+    # Execute query and get all matching rows
+    result = await session.execute(q)
+    logs = result.scalars().all()
 
-    ok_result = await session.execute(
-        select(func.count()).select_from(
-            q.where(RequestLog.status_code >= 200, RequestLog.status_code < 300).subquery()
-        )
-    )
-    ok = ok_result.scalar() or 0
-
+    # Calculate aggregates in Python
+    total = len(logs)
+    ok = sum(1 for log in logs if 200 <= log.status_code < 300)
     err = total - ok
-
-    # Aggregate sums
-    agg_result = await session.execute(
-        select(
-            func.sum(RequestLog.cost_usd),
-            func.sum(RequestLog.latency_ms),
-            func.sum(RequestLog.ttfb_ms),
-            func.sum(RequestLog.prompt_tokens),
-            func.sum(RequestLog.completion_tokens),
-            func.sum(RequestLog.cache_tokens),
-            func.sum(RequestLog.total_tokens),
-        ).select_from(q.subquery())
-    )
-    row = agg_result.first()
-
-    total_cost = float(row[0] or 0)
-    total_latency = int(row[1] or 0)
-    total_ttfb = int(row[2] or 0)
-    total_prompt = int(row[3] or 0)
-    total_completion = int(row[4] or 0)
-    total_cache = int(row[5] or 0)
-    total_tokens = int(row[6] or 0)
+    total_cost = sum(log.cost_usd for log in logs)
+    total_latency = sum(log.latency_ms for log in logs)
+    total_ttfb = sum(log.ttfb_ms for log in logs)
+    total_prompt = sum(log.prompt_tokens for log in logs)
+    total_completion = sum(log.completion_tokens for log in logs)
+    total_cache = sum(log.cache_tokens for log in logs)
+    total_tokens = sum(log.total_tokens for log in logs)
 
     return LogSummary(
         total_requests=total,
