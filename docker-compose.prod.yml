@@ -1,8 +1,6 @@
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/sajjadsaharkhan/llmeter/backend:main
     ports:
       - "8000:8000"
     env_file: .env
@@ -19,11 +17,7 @@ services:
       start_period: 15s
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${BACKEND_URL:-http://localhost:8000}
+    image: ghcr.io/sajjadsaharkhan/llmeter/frontend:main
     ports:
       - "3000:3000"
     environment:

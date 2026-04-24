@@ -53,13 +53,14 @@ BACKEND_URL=http://your-server-ip:8000
 CORS_ORIGINS=http://your-server-ip:3000
 ```
 
-### 3. Build and start
+### 3. Pull and start
 
 ```bash
-docker compose -f docker-compose.prod.yml up --build -d
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-Persistent data is stored in `./data/` (bind mount). Back this directory up to preserve logs and settings.
+Images are pulled from `ghcr.io/sajjadsaharkhan/llmeter`. Persistent data is stored in `./data/` (bind mount). Back this directory up to preserve logs and settings.
 
 ### Putting a reverse proxy in front
 
