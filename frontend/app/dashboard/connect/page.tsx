@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Trash, Copy, Check, AlertTriangle, Clock, Eye, EyeOff, Cable } from "lucide-react";
+import { Plus, Trash, Copy, Check, AlertTriangle, Clock, Eye, EyeOff, Cable, RefreshCw } from "lucide-react";
 import { Topbar } from "@/components/shell/Sidebar";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Badge, Dialog, Input, Label, Skeleton, useToast } from "@/components/ui";
 import { api, type AppSettings, type ApiToken } from "@/lib/api";
-import { fmtTime } from "@/lib/utils";
+import { fmtTime, fmtDateTime } from "@/lib/utils";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -127,6 +127,8 @@ export default function ConnectPage() {
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [revokeId, setRevokeId] = useState<number | null>(null);
+  const [regenerateId, setRegenerateId] = useState<number | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
   const [codeTab, setCodeTab] = useState<"curl" | "python" | "typescript">("curl");
   const toast = useToast();
 
@@ -172,6 +174,35 @@ export default function ConnectPage() {
       toast({ variant: "success", title: "Token revoked" });
     } catch {
       toast({ variant: "destructive", title: "Failed to revoke token" });
+    }
+  };
+
+  const regenerateToken = async (id: number) => {
+    setRegenerating(true);
+    try {
+      const oldToken = tokens.find((t) => t.id === id);
+      if (!oldToken) throw new Error("Token not found");
+
+      // Create new token with same name and expiry
+      const result = await api.createToken({
+        name: oldToken.name,
+        expires_at: oldToken.expires_at || undefined,
+      });
+
+      // Delete old token
+      await api.revokeToken(id);
+
+      // Update tokens list
+      setTokens((prev) => [result, ...prev.filter((t) => t.id !== id)]);
+      setCreatedToken(result.token);
+      setShowToken(false);
+      setCreateOpen(true);
+      setRegenerateId(null);
+      toast({ variant: "success", title: "Token regenerated" });
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: "Error", description: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -249,9 +280,9 @@ console.log(response.choices[0].message.content);`;
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium truncate">{token.name}</span>
                           {expired
-                            ? <Badge variant="destructive">Expired</Badge>
+                            ? <Badge variant="destructive">Expired {fmtDateTime(token.expires_at!)}</Badge>
                             : token.expires_at
-                              ? <Badge variant="warning"><Clock size={10} className="mr-1" />{fmtTime(token.expires_at)}</Badge>
+                              ? <Badge variant="warning"><Clock size={10} className="mr-1" />{fmtDateTime(token.expires_at)}</Badge>
                               : <Badge variant="success">No expiry</Badge>
                           }
                         </div>
@@ -263,10 +294,16 @@ console.log(response.choices[0].message.content);`;
                           </span>
                         </div>
                       </div>
-                      <button onClick={() => setRevokeId(token.id)}
-                        className="shrink-0 h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors">
-                        <Trash size={13} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setRegenerateId(token.id)}
+                          className="shrink-0 h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
+                          <RefreshCw size={13} />
+                        </button>
+                        <button onClick={() => setRevokeId(token.id)}
+                          className="shrink-0 h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors">
+                          <Trash size={13} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -393,6 +430,33 @@ console.log(response.choices[0].message.content);`;
             <button onClick={() => revokeId !== null && revokeToken(revokeId)}
               className="inline-flex items-center gap-2 h-9 px-3.5 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-600/90">
               <Trash size={13} />Revoke token
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Regenerate confirmation dialog */}
+      <Dialog open={regenerateId !== null} onOpenChange={(v) => { if (!v) setRegenerateId(null); }} size="sm">
+        <div className="p-5">
+          <div className="flex items-start gap-3 mb-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 shrink-0">
+              <RefreshCw size={16} className="text-accent" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Regenerate this token?</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                A new token will be created and the old one will be revoked. Any applications using the old token will need to be updated.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setRegenerateId(null)}
+              className="h-9 px-3.5 rounded-md border border-border text-sm font-medium hover:bg-muted">
+              Cancel
+            </button>
+            <button onClick={() => regenerateId !== null && regenerateToken(regenerateId)} disabled={regenerating}
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-md bg-accent text-accent-fg text-sm font-medium hover:bg-foreground/90 disabled:opacity-50">
+              {regenerating ? "Regenerating..." : <><RefreshCw size={13} />Regenerate</>}
             </button>
           </div>
         </div>
