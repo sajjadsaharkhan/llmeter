@@ -77,6 +77,66 @@ For TLS and a clean domain, point nginx or Caddy at port `8000` (API) and `3000`
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed frontend origins |
 | `BACKEND_URL` | `http://localhost:8000` | Public URL of the backend (used at frontend build time) |
 
+## How to Use
+
+### 1. Add a provider
+
+Open the dashboard → **Settings → Providers** and click **Add Provider**. Fill in:
+
+- **Name** — a label for this provider (e.g. `OpenAI`, `Azure`)
+- **Base URL** — the OpenAI-compatible endpoint (e.g. `https://api.openai.com/v1`)
+- **API Key** — your upstream provider key (stored encrypted)
+- **Weight** — relative traffic weight when multiple providers are configured
+
+### 2. Create an API token
+
+Go to **Settings → API Tokens** and click **Generate Token**. Copy the token — it is only shown once.  
+Tokens gate access to the proxy endpoint. Each token can carry a label for identification.
+
+### 3. Point your SDK at LLMeter
+
+Replace the `base_url` in your SDK or HTTP client with the LLMeter backend URL and pass your LLMeter token as the API key:
+
+```python
+# Python — openai SDK
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8000/v1",   # or your server URL
+    api_key="<your-llmeter-token>",
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+```
+
+```typescript
+// TypeScript — openai SDK
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:8000/v1",
+  apiKey: "<your-llmeter-token>",
+});
+```
+
+All OpenAI-compatible clients (LangChain, LiteLLM, etc.) work the same way — just set `base_url` / `baseURL` and `api_key`.
+
+### 4. View logs and analytics
+
+- **Dashboard** — cost, token usage, and latency KPIs with a cost-over-time chart. Use the date-range picker to scope the window.
+- **Logs** — full request/response history with per-request cost, latency, model, and provider. Use the search bar and filters to drill down; the summary bar at the top reflects the current filter.
+
+### 5. Configure pricing
+
+Go to **Settings → Models** to set per-token input/output prices for each model. Costs are calculated from these values. If a model is missing, add it and set its price — requests will be costed retroactively on the next page load.
+
+### 6. Set display currency
+
+Go to **Settings → General** to switch between **USD** and **IRT** (Iranian Toman). All cost figures across the dashboard and logs update immediately.
+
 ## Architecture
 
 ```
