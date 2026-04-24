@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     encryption_key: str = Field(
         default_factory=lambda: base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
     )
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
     class Config:
         env_file = [".env", "../.env"]
