@@ -54,10 +54,15 @@ export const api = {
     request<Provider>(`/api/providers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteProvider: (id: number) =>
     request<void>(`/api/providers/${id}`, { method: "DELETE" }),
-  testProvider: (id: number) =>
-    request<{ ok: boolean; message: string; latency_ms?: number }>(`/api/providers/${id}/test`, { method: "POST" }),
-  getProviderModels: (id: number) =>
-    request<{ models: string[] }>(`/api/providers/${id}/models`),
+  testProvider: (id: number, api_key?: string) =>
+    request<{ ok: boolean; message: string; latency_ms?: number; models?: string[] }>(
+      `/api/providers/${id}/test`,
+      { method: "POST", body: JSON.stringify({ api_key: api_key || "" }) }
+    ),
+  getProviderModels: (id: number, api_key?: string) => {
+    const q = api_key ? `?api_key=${encodeURIComponent(api_key)}` : "";
+    return request<{ models: string[] }>(`/api/providers/${id}/models${q}`);
+  },
 
   // Logs
   getLogs: (params: LogsParams) => {
@@ -128,6 +133,7 @@ export interface Provider {
   id: number;
   name: string;
   base_url: string;
+  api_key: string;
   key_mask: string;
   model_aliases: Record<string, ModelMapping>;
   cost_input_per_1m: number;
@@ -142,6 +148,7 @@ export interface Provider {
   last_test_ok: boolean | null;
   last_test_message: string | null;
   last_test_latency_ms: number | null;
+  models_response: Record<string, unknown> | null;
 }
 
 export interface ProviderCreate {

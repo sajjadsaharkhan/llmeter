@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, Integer, Float, JSON, DateTime
+from sqlalchemy import String, Boolean, Integer, Float, JSON, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, UTC
 from database import Base
@@ -24,3 +24,4 @@ class Provider(Base):
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(String(256), nullable=True)
     last_test_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    models_response: Mapped[dict | None] = mapped_column(JSON, nullable=True)

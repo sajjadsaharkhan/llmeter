@@ -37,6 +37,7 @@ async def _migrate_db():
         ("providers", "last_test_ok", "BOOLEAN"),
         ("providers", "last_test_message", "VARCHAR(256)"),
         ("providers", "last_test_latency_ms", "INTEGER"),
+        ("providers", "models_response", "JSON"),
         ("request_logs", "route", "VARCHAR(256)"),
     ]
     async with engine.connect() as conn:

@@ -45,7 +45,8 @@ class ProviderResponse(BaseModel):
     id: int
     name: str
     base_url: str
-    key_mask: str
+    api_key: str  # Decrypted API key for editing
+    key_mask: str  # Masked version for display
     model_aliases: dict
     cost_input_per_1m: float
     cost_cache_per_1m: float
@@ -59,6 +60,7 @@ class ProviderResponse(BaseModel):
     last_test_ok: Optional[bool] = None
     last_test_message: Optional[str] = None
     last_test_latency_ms: Optional[int] = None
+    models_response: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -69,15 +71,17 @@ def _to_response(p: Provider) -> ProviderResponse:
         raw_key = decrypt(p.api_key_encrypted)
         key_mask = mask_key(raw_key)
     except Exception:
+        raw_key = ""
         key_mask = "sk-...****"
     return ProviderResponse(
-        id=p.id, name=p.name, base_url=p.base_url, key_mask=key_mask,
+        id=p.id, name=p.name, base_url=p.base_url, api_key=raw_key, key_mask=key_mask,
         model_aliases=p.model_aliases or {},
         cost_input_per_1m=p.cost_input_per_1m, cost_cache_per_1m=p.cost_cache_per_1m,
         cost_output_per_1m=p.cost_output_per_1m, weight=p.weight, is_active=p.is_active,
         color=p.color, created_at=p.created_at, updated_at=p.updated_at,
         last_test_at=p.last_test_at, last_test_ok=p.last_test_ok,
         last_test_message=p.last_test_message, last_test_latency_ms=p.last_test_latency_ms,
+        models_response=p.models_response,
     )
 
 
@@ -175,11 +179,17 @@ class TestResponse(BaseModel):
     ok: bool
     message: str
     latency_ms: Optional[int] = None
+    models: Optional[list[str]] = None
+
+
+class TestRequest(BaseModel):
+    api_key: Optional[str] = None
 
 
 @router.post("/{provider_id}/test", response_model=TestResponse)
 async def test_provider(
     provider_id: int,
+    body: TestRequest,
     session: AsyncSession = Depends(get_session),
     _: str = Depends(get_current_user),
 ):
@@ -190,10 +200,13 @@ async def test_provider(
     if not p:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    try:
-        api_key = decrypt(p.api_key_encrypted)
-    except Exception:
-        return TestResponse(ok=False, message="Could not decrypt API key")
+    # Use provided API key if available, otherwise use stored key
+    api_key = body.api_key
+    if not api_key:
+        try:
+            api_key = decrypt(p.api_key_encrypted)
+        except Exception:
+            return TestResponse(ok=False, message="Could not decrypt API key")
 
     url = p.base_url.rstrip("/") + "/models"
     start = time.monotonic()
@@ -207,8 +220,12 @@ async def test_provider(
         if resp.status_code < 400:
             try:
                 data = resp.json()
-                model_count = len(data.get("data", []))
+                models = sorted([m.get("id", "") for m in data.get("data", []) if m.get("id")])
+                model_count = len(models)
+                # Store models response in database
+                p.models_response = data
             except Exception:
+                models = None
                 model_count = 0
             msg = f"Connected. {model_count} models available."
             p.last_test_at = datetime.now(UTC)
@@ -216,7 +233,7 @@ async def test_provider(
             p.last_test_message = msg
             p.last_test_latency_ms = latency
             await session.commit()
-            return TestResponse(ok=True, message=msg, latency_ms=latency)
+            return TestResponse(ok=True, message=msg, latency_ms=latency, models=models)
         else:
             msg = f"HTTP {resp.status_code}: {resp.text[:120]}"
             p.last_test_at = datetime.now(UTC)
@@ -238,6 +255,7 @@ async def test_provider(
 @router.get("/{provider_id}/models")
 async def list_provider_models(
     provider_id: int,
+    api_key: Optional[str] = None,
     session: AsyncSession = Depends(get_session),
     _: str = Depends(get_current_user),
 ):
@@ -247,21 +265,36 @@ async def list_provider_models(
     if not p:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    try:
-        api_key = decrypt(p.api_key_encrypted)
-    except Exception:
-        return {"models": []}
+    # Use provided API key if available, otherwise use stored key
+    key_to_use = api_key
+    if not key_to_use:
+        try:
+            key_to_use = decrypt(p.api_key_encrypted)
+        except Exception:
+            key_to_use = None
 
+    # Return stored models response if available and no explicit API key was provided
+    if p.models_response and not api_key:
+        try:
+            models = sorted([m.get("id", "") for m in p.models_response.get("data", []) if m.get("id")])
+            return {"models": models}
+        except Exception:
+            pass
+
+    # Fetch from provider API
     url = p.base_url.rstrip("/") + "/models"
     try:
         headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        if key_to_use:
+            headers["Authorization"] = f"Bearer {key_to_use}"
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(url, headers=headers)
         if resp.status_code < 400:
             data = resp.json()
             models = sorted([m.get("id", "") for m in data.get("data", []) if m.get("id")])
+            # Store models response for future use
+            p.models_response = data
+            await session.commit()
             return {"models": models}
     except Exception:
         pass

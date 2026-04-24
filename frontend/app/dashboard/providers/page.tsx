@@ -287,10 +287,22 @@ function ProviderSheet({ provider, open, onOpenChange, onSave, onDelete, allProv
   useEffect(() => {
     if (!open) { setConfirmDelete(false); setDeleteInput(""); return; }
     if (provider) {
-      setForm({ name: provider.name, base_url: provider.base_url, api_key: "", weight: provider.weight, is_active: provider.is_active });
+      setForm({ name: provider.name, base_url: provider.base_url, api_key: provider.api_key || "", weight: provider.weight, is_active: provider.is_active });
       setAliases(aliasesToRows(provider.model_aliases || {}));
-      // Fetch models from provider
-      api.getProviderModels(provider.id).then((r) => setProviderModels(r.models)).catch(() => {});
+      // Load models from stored response or fetch from provider
+      if (provider.models_response) {
+        try {
+          const models = ((provider.models_response as { data?: Array<{ id?: string }> }).data || [])
+            .map((m) => m.id || "")
+            .filter((m) => m)
+            .sort();
+          setProviderModels(models);
+        } catch {
+          api.getProviderModels(provider.id).then((r) => setProviderModels(r.models)).catch(() => {});
+        }
+      } else {
+        api.getProviderModels(provider.id).then((r) => setProviderModels(r.models)).catch(() => {});
+      }
     } else {
       setForm({ name: "", base_url: "", api_key: "", weight: 50, is_active: true });
       setAliases([]);
@@ -319,14 +331,45 @@ function ProviderSheet({ provider, open, onOpenChange, onSave, onDelete, allProv
     }
   };
 
+  const autoFillPricingFromModels = (aliasIndex: number) => {
+    const alias = aliases[aliasIndex];
+    if (!provider?.models_response || !alias.target) return;
+
+    try {
+      const data = provider.models_response as { data?: Array<{ id?: string; pricing?: Record<string, number> }> };
+      const models = data.data || [];
+      const modelData = models.find((m) => m.id === alias.target);
+
+      if (modelData?.pricing) {
+        const pricing = modelData.pricing;
+        // OpenAI-compatible pricing format (in cents per million tokens)
+        const inputCost = (pricing.prompt || pricing.input || 0) / 100;
+        const outputCost = (pricing.completion || pricing.output || 0) / 100;
+        const cacheCost = (pricing.cache || 0) / 100;
+
+        updateAlias(aliasIndex, {
+          cost_input: inputCost,
+          cost_cache: cacheCost,
+          cost_output: outputCost,
+        });
+        return true;
+      }
+    } catch (e) {
+      console.error("Failed to extract pricing from models_response:", e);
+    }
+    return false;
+  };
+
   const runTest = async () => {
     if (!provider) return;
     setTest({ status: "loading", message: null, latency: null });
     try {
-      const res = await api.testProvider(provider.id);
+      const res = await api.testProvider(provider.id, form.api_key);
       setTest({ status: res.ok ? "ok" : "error", message: res.message, latency: res.latency_ms ?? null });
-      if (res.ok) {
-        api.getProviderModels(provider.id).then((r) => setProviderModels(r.models)).catch(() => {});
+      if (res.ok && res.models) {
+        setProviderModels(res.models);
+      } else if (res.ok) {
+        api.getProviderModels(provider.id, form.api_key).then((r) => setProviderModels(r.models)).catch(() => {});
       }
     } catch (e: unknown) {
       setTest({ status: "error", message: e instanceof Error ? e.message : "Connection failed", latency: null });
@@ -433,6 +476,25 @@ function ProviderSheet({ provider, open, onOpenChange, onSave, onDelete, allProv
                         <div>Set the model name your app sends (left) and the actual model at the provider (right). Selecting a known model auto-fills pricing. Requires a successful connection test.</div>
                       </div>
                     </InfoTip>
+                    {provider?.models_response && aliases.some((a) => a.target) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          let filled = 0;
+                          aliases.forEach((_, i) => {
+                            if (autoFillPricingFromModels(i)) filled++;
+                          });
+                          if (filled > 0) {
+                            toast({ variant: "success", title: `Filled pricing for ${filled} model(s)` });
+                          } else {
+                            toast({ variant: "destructive", title: "No pricing data available for any mapped models" });
+                          }
+                        }}
+                        className="text-[10px] text-accent hover:underline ml-auto"
+                      >
+                        Auto-fill all pricing
+                      </button>
+                    )}
                   </div>
                   {!mappingEnabled ? (
                     <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-4">
@@ -477,7 +539,25 @@ function ProviderSheet({ provider, open, onOpenChange, onSave, onDelete, allProv
                               { label: "Output /1M", key: "cost_output" as const },
                             ].map((f) => (
                               <div key={f.key}>
-                                <div className="text-[9px] text-muted-foreground uppercase tracking-wide mb-0.5">{f.label}</div>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <div className="text-[9px] text-muted-foreground uppercase tracking-wide">{f.label}</div>
+                                  {provider?.models_response && alias.target && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (autoFillPricingFromModels(i)) {
+                                          toast({ variant: "success", title: "Pricing filled from provider data" });
+                                        } else {
+                                          toast({ variant: "destructive", title: "No pricing data available for this model" });
+                                        }
+                                      }}
+                                      className="text-[9px] text-accent hover:underline"
+                                      title="Auto-fill pricing from cached provider models data"
+                                    >
+                                      Auto-fill
+                                    </button>
+                                  )}
+                                </div>
                                 <div className="relative">
                                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
                                   <Input type="number" step="0.001" min="0" value={alias[f.key]}
@@ -570,7 +650,22 @@ export default function ProvidersPage() {
   const save = async (data: ProviderCreate & { id?: number }) => {
     try {
       if (data.id) {
-        await api.updateProvider(data.id, data);
+        // When editing, only include api_key if it's not empty
+        const updateData: Partial<ProviderCreate> = {
+          name: data.name,
+          base_url: data.base_url,
+          model_aliases: data.model_aliases,
+          cost_input_per_1m: data.cost_input_per_1m,
+          cost_cache_per_1m: data.cost_cache_per_1m,
+          cost_output_per_1m: data.cost_output_per_1m,
+          weight: data.weight,
+          is_active: data.is_active,
+        };
+        // Only include api_key if it's provided (not empty)
+        if (data.api_key) {
+          updateData.api_key = data.api_key;
+        }
+        await api.updateProvider(data.id, updateData);
         toast({ variant: "success", title: "Provider updated", description: data.name });
       } else {
         await api.createProvider(data);
