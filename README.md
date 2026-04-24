@@ -16,8 +16,8 @@ Route requests through LLMeter to get unified cost tracking, latency monitoring,
 ## Quick Start (development)
 
 ```bash
-git clone <repo>
-cd LLMeter
+git clone https://github.com/sajjadsaharkhan/llmeter.git
+cd llmeter
 cp .env.example .env   # edit secrets before starting
 
 docker compose up --build
