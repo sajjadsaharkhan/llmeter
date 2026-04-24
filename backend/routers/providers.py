@@ -198,8 +198,11 @@ async def test_provider(
     url = p.base_url.rstrip("/") + "/models"
     start = time.monotonic()
     try:
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+            resp = await client.get(url, headers=headers)
         latency = int((time.monotonic() - start) * 1000)
         if resp.status_code < 400:
             try:
@@ -251,8 +254,11 @@ async def list_provider_models(
 
     url = p.base_url.rstrip("/") + "/models"
     try:
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+            resp = await client.get(url, headers=headers)
         if resp.status_code < 400:
             data = resp.json()
             models = sorted([m.get("id", "") for m in data.get("data", []) if m.get("id")])

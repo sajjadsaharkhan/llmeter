@@ -86,10 +86,9 @@ async def _proxy_request(
     model_used = body.get("model", "unknown")
     is_stream = body.get("stream", False)
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     start = time.monotonic()
     ttfb_ms = 0
