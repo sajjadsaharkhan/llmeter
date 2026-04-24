@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: oklch(0.995 0.003 265);
+  --foreground: oklch(0.20 0.025 265);
+  --border: oklch(0.91 0.01 265);
+  --muted: oklch(0.965 0.008 265);
+  --muted-foreground: oklch(0.50 0.02 265);
+  --popover: oklch(1 0 0);
+  --ring: oklch(0.55 0.19 285 / 0.35);
+  --accent: oklch(0.55 0.19 285);
+  --accent-fg: oklch(0.985 0 0);
+  --accent-soft: oklch(0.55 0.19 285 / 0.10);
+  color-scheme: light;
+}
+
+.dark {
+  --background: oklch(0.195 0.018 265);
+  --foreground: oklch(0.965 0.005 265);
+  --border: oklch(0.30 0.022 265);
+  --muted: oklch(0.255 0.022 265);
+  --muted-foreground: oklch(0.70 0.018 265);
+  --popover: oklch(0.235 0.022 265);
+  --ring: oklch(0.72 0.17 290 / 0.5);
+  --accent: oklch(0.72 0.17 290);
+  --accent-fg: oklch(0.16 0.02 265);
+  --accent-soft: oklch(0.72 0.17 290 / 0.15);
+  color-scheme: dark;
+}
+
+* { border-color: var(--border); }
+html, body { background: var(--background); color: var(--foreground); }
+body {
+  font-feature-settings: "cv11","ss01","ss03";
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background:
+    radial-gradient(ellipse 1200px 600px at 85% -10%, oklch(0.72 0.17 290 / 0.10), transparent 60%),
+    radial-gradient(ellipse 900px 500px at 10% 110%, oklch(0.65 0.14 200 / 0.08), transparent 60%),
+    var(--background);
+  background-attachment: fixed;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--background); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+input[type=range] { height: 4px; background: var(--muted); border-radius: 999px; appearance: none; }
+input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 999px; background: var(--foreground); cursor: pointer; box-shadow: 0 0 0 3px var(--background); border: 1px solid var(--border); }
+
+@layer utilities {
+  .bg-background { background-color: var(--background); }
+  .bg-muted { background-color: var(--muted); }
+  .bg-popover { background-color: var(--popover); }
+  .bg-accent { background-color: var(--accent); }
+  .bg-accent-soft { background-color: var(--accent-soft); }
+  .text-foreground { color: var(--foreground); }
+  .text-muted-foreground { color: var(--muted-foreground); }
+  .text-accent { color: var(--accent); }
+  .text-accent-fg { color: var(--accent-fg); }
+  .border-border { border-color: var(--border); }
+}

@@ -1,0 +1,39 @@
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker volumes
+docker-volumes/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Node modules (handled by subdirectory gitignores)
+# node_modules/
+
+# Logs
+*.log
+logs/
+*.sqlite
+*.db
+
+# Coverage
+htmlcov/
+.coverage
+.tox/
+.pytest_cache/
