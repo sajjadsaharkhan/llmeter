@@ -50,8 +50,107 @@ class PaginatedLogs(BaseModel):
     limit: int
 
 
+class LogSummary(BaseModel):
+    total_requests: int
+    ok_requests: int
+    error_requests: int
+    error_rate: float
+    total_cost_usd: float
+    avg_cost_per_request: float
+    avg_latency_ms: float
+    avg_ttfb_ms: float
+    total_prompt_tokens: int
+    total_completion_tokens: int
+    total_cache_tokens: int
+    total_tokens: int
+
+
 class BulkSearchRequest(BaseModel):
     request_ids: list[str]
+
+
+@router.get("/summary", response_model=LogSummary)
+async def get_logs_summary(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    status: Optional[str] = None,
+    from_time: Optional[datetime] = None,
+    to_time: Optional[datetime] = None,
+    search: Optional[str] = None,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(get_current_user),
+):
+    q = select(RequestLog)
+
+    if provider:
+        q = q.where(RequestLog.provider_name == provider)
+    if model:
+        q = q.where(RequestLog.model_used == model)
+    if status:
+        if status == "2xx":
+            q = q.where(RequestLog.status_code >= 200, RequestLog.status_code < 300)
+        elif status == "4xx":
+            q = q.where(RequestLog.status_code >= 400, RequestLog.status_code < 500)
+        elif status == "5xx":
+            q = q.where(RequestLog.status_code >= 500)
+    if from_time:
+        q = q.where(RequestLog.created_at >= from_time)
+    if to_time:
+        q = q.where(RequestLog.created_at <= to_time)
+    if search:
+        q = q.where(
+            RequestLog.request_id.contains(search) | RequestLog.model_used.contains(search)
+        )
+
+    # Count total, ok, and errors
+    total_result = await session.execute(select(func.count()).select_from(q.subquery()))
+    total = total_result.scalar() or 0
+
+    ok_result = await session.execute(
+        select(func.count()).select_from(
+            q.where(RequestLog.status_code >= 200, RequestLog.status_code < 300).subquery()
+        )
+    )
+    ok = ok_result.scalar() or 0
+
+    err = total - ok
+
+    # Aggregate sums
+    agg_result = await session.execute(
+        select(
+            func.sum(RequestLog.cost_usd),
+            func.sum(RequestLog.latency_ms),
+            func.sum(RequestLog.ttfb_ms),
+            func.sum(RequestLog.prompt_tokens),
+            func.sum(RequestLog.completion_tokens),
+            func.sum(RequestLog.cache_tokens),
+            func.sum(RequestLog.total_tokens),
+        ).select_from(q.subquery())
+    )
+    row = agg_result.first()
+
+    total_cost = float(row[0] or 0)
+    total_latency = int(row[1] or 0)
+    total_ttfb = int(row[2] or 0)
+    total_prompt = int(row[3] or 0)
+    total_completion = int(row[4] or 0)
+    total_cache = int(row[5] or 0)
+    total_tokens = int(row[6] or 0)
+
+    return LogSummary(
+        total_requests=total,
+        ok_requests=ok,
+        error_requests=err,
+        error_rate=round(err / total * 100, 2) if total > 0 else 0.0,
+        total_cost_usd=total_cost,
+        avg_cost_per_request=round(total_cost / total, 6) if total > 0 else 0.0,
+        avg_latency_ms=round(total_latency / total) if total > 0 else 0,
+        avg_ttfb_ms=round(total_ttfb / total) if total > 0 else 0,
+        total_prompt_tokens=total_prompt,
+        total_completion_tokens=total_completion,
+        total_cache_tokens=total_cache,
+        total_tokens=total_tokens,
+    )
 
 
 @router.get("", response_model=PaginatedLogs)

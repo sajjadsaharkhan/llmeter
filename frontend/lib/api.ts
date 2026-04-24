@@ -72,6 +72,16 @@ export const api = {
     if (params.search) q.set("search", params.search);
     return request<PaginatedLogs>(`/api/logs?${q}`);
   },
+  getLogsSummary: (params: LogsParams) => {
+    const q = new URLSearchParams();
+    if (params.provider) q.set("provider", params.provider);
+    if (params.model) q.set("model", params.model);
+    if (params.status) q.set("status", params.status);
+    if (params.from_time) q.set("from_time", params.from_time);
+    if (params.to_time) q.set("to_time", params.to_time);
+    if (params.search) q.set("search", params.search);
+    return request<LogSummary>(`/api/logs/summary?${q}`);
+  },
   getLog: (id: number) => request<LogDetail>(`/api/logs/${id}`),
   getDistinctModels: () => request<{ models: string[] }>("/api/logs/distinct-models"),
   clearLogs: () => request<void>("/api/logs", { method: "DELETE" }),
@@ -180,6 +190,21 @@ export interface PaginatedLogs {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface LogSummary {
+  total_requests: number;
+  ok_requests: number;
+  error_requests: number;
+  error_rate: number;
+  total_cost_usd: number;
+  avg_cost_per_request: number;
+  avg_latency_ms: number;
+  avg_ttfb_ms: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_cache_tokens: number;
+  total_tokens: number;
 }
 
 export interface LogsParams {
