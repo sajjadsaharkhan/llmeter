@@ -13,14 +13,34 @@ Route requests through LLMeter to get unified cost tracking, latency monitoring,
 - **API tokens** — issue scoped Bearer tokens for proxy authentication
 - **Log retention** — configurable auto-deletion policy
 
-## Quick Start (development)
+## Quick Start
+
+The easiest way to start LLMeter is with the included `start.sh` script. It handles secrets generation, `.env` management, and Docker Compose for you.
 
 ```bash
 git clone https://github.com/sajjadsaharkhan/llmeter.git
 cd llmeter
-cp .env.example .env   # edit secrets before starting
+./start.sh          # development mode — builds images locally
+```
 
-docker compose up --build
+| Command | What it does |
+|---|---|
+| `./start.sh` | Start in **development** mode (builds from source) |
+| `./start.sh prod` | Start in **production** mode (pulls prebuilt images from GHCR) |
+| `./start.sh down` | Stop all services |
+
+The script will:
+- Auto-generate `JWT_SECRET` and `ENCRYPTION_KEY` if they are missing from `.env`
+- Warn if `ADMIN_PASSWORD` is still `changeme` when starting in production mode
+- Print the frontend URL and login credentials on startup
+
+To customise the defaults, edit `.env` before running (or let the script create it on first run):
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=changeme        # change this in production
+BACKEND_URL=http://localhost:8000
+CORS_ORIGINS=http://localhost:3000
 ```
 
 - Frontend: http://localhost:3000  
