@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui";
+import { api, setToken } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,22 +19,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (response.ok) {
-        const { token } = await response.json();
-        localStorage.setItem("llmeter_token", token);
-        router.push("/dashboard");
-      } else {
-        const { error } = await response.json();
-        setError(error || "Invalid credentials");
-      }
-    } catch {
-      setError("Connection failed. Please try again.");
+      const { access_token } = await api.login(username, password);
+      setToken(access_token);
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid credentials");
     } finally {
       setLoading(false);
     }
@@ -59,12 +49,12 @@ export default function LoginPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-1.5 block">Email</label>
+              <label className="text-sm font-medium mb-1.5 block">Username</label>
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="admin"
                 required
                 className="w-full"
               />
