@@ -144,7 +144,7 @@ export default function ConnectPage() {
   useEffect(() => { load(); }, [load]);
 
   const baseUrl = (settings?.proxy_base_url || "http://localhost:8000").replace(/\/$/, "");
-  const requireAuth = settings?.require_proxy_auth ?? false;
+  const requireAuth = true;
   const tokenPlaceholder = tokens.length > 0 ? `${tokens[0].token_prefix}****` : "sk-lm-YOUR_TOKEN";
 
   const createToken = async () => {
