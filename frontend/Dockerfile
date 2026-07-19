@@ -1,7 +1,7 @@
 FROM node:22-alpine AS builder
 
 # NEXT_PUBLIC_* vars are inlined at build time — must be a build arg
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 WORKDIR /app
