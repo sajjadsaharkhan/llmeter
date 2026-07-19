@@ -5,12 +5,37 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+from urllib.parse import urlparse, urlunparse
+
 from database import get_session
 from models.provider import Provider
+from models.settings import AppSettings
 from routers.auth import get_current_user
 from services.crypto import encrypt, decrypt, mask_key
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
+
+
+def _build_proxy_url(settings: AppSettings | None) -> str | None:
+    if not settings or not settings.http_proxy_enabled:
+        return None
+    url = (settings.http_proxy_url or "").strip()
+    if not url:
+        return None
+    username = (settings.http_proxy_username or "").strip()
+    password = (settings.http_proxy_password or "").strip()
+    if username:
+        parsed = urlparse(url)
+        netloc = f"{username}:{password}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        url = urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
+    return url
+
+
+async def _get_app_settings(session: AsyncSession) -> AppSettings | None:
+    result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
+    return result.scalar_one_or_none()
 
 COLORS = ["violet", "teal", "amber", "sky", "rose", "zinc"]
 
@@ -208,13 +233,16 @@ async def test_provider(
         except Exception:
             return TestResponse(ok=False, message="Could not decrypt API key")
 
+    app_settings = await _get_app_settings(session)
+    http_proxy = _build_proxy_url(app_settings)
+
     url = p.base_url.rstrip("/") + "/models"
     start = time.monotonic()
     try:
         headers = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, proxy=http_proxy) as client:
             resp = await client.get(url, headers=headers)
         latency = int((time.monotonic() - start) * 1000)
         if resp.status_code < 400:
@@ -282,12 +310,14 @@ async def list_provider_models(
             pass
 
     # Fetch from provider API
+    app_settings = await _get_app_settings(session)
+    http_proxy = _build_proxy_url(app_settings)
     url = p.base_url.rstrip("/") + "/models"
     try:
         headers = {}
         if key_to_use:
             headers["Authorization"] = f"Bearer {key_to_use}"
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, proxy=http_proxy) as client:
             resp = await client.get(url, headers=headers)
         if resp.status_code < 400:
             data = resp.json()

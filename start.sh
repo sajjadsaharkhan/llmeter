@@ -35,8 +35,7 @@ fi
 # ── Defaults ──────────────────────────────────────────────────────────────────
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-changeme}"
-BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
-CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}"
+CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:8090}"
 
 # Auto-generate secrets if missing or still set to placeholder values
 _is_placeholder() {
@@ -59,7 +58,6 @@ ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
-BACKEND_URL=${BACKEND_URL}
 CORS_ORIGINS=${CORS_ORIGINS}
 EOF
 
@@ -78,13 +76,13 @@ case "$MODE" in
     ;;
   prod)
     info "Starting in ${BOLD}production${RESET} mode..."
-    docker compose -f docker-compose.prod.yml pull
-    docker compose -f docker-compose.prod.yml up -d
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
     ;;
   down)
     info "Stopping all services..."
     docker compose down 2>/dev/null || true
-    docker compose -f docker-compose.prod.yml down 2>/dev/null || true
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml down 2>/dev/null || true
     ;;
   *)
     error "Unknown mode '${MODE}'. Usage: ./start.sh [dev|prod|down]"
@@ -94,7 +92,7 @@ esac
 if [ "$MODE" != "down" ]; then
   echo ""
   info "Services are up:"
-  echo -e "  Frontend  → ${BOLD}http://localhost:3000${RESET}"
-  echo -e "  Backend   → ${BOLD}http://localhost:8000${RESET}"
-  echo -e "  Login     → ${BOLD}${ADMIN_USERNAME}${RESET} / ${BOLD}${ADMIN_PASSWORD}${RESET}"
+  echo -e "  Admin UI   → ${BOLD}http://localhost:8090${RESET}"
+  echo -e "  LLM Proxy  → ${BOLD}http://localhost:8090/proxy/v1${RESET}"
+  echo -e "  Login      → ${BOLD}${ADMIN_USERNAME}${RESET} / ${BOLD}${ADMIN_PASSWORD}${RESET}"
 fi

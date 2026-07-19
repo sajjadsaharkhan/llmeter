@@ -1,3 +1,6 @@
+import time
+from urllib.parse import urlparse, urlunparse
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -33,8 +36,11 @@ class SettingsResponse(BaseModel):
     default_currency: str
     usd_to_toman_rate: float
     proxy_base_url: str
-    require_proxy_auth: bool
     db_size_bytes: int
+    http_proxy_enabled: bool
+    http_proxy_url: str
+    http_proxy_username: str
+    http_proxy_password: str
 
 
 class SettingsUpdate(BaseModel):
@@ -45,12 +51,27 @@ class SettingsUpdate(BaseModel):
     default_currency: Optional[str] = None
     usd_to_toman_rate: Optional[float] = None
     proxy_base_url: Optional[str] = None
-    require_proxy_auth: Optional[bool] = None
+    http_proxy_enabled: Optional[bool] = None
+    http_proxy_url: Optional[str] = None
+    http_proxy_username: Optional[str] = None
+    http_proxy_password: Optional[str] = None
 
 
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
+
+
+class ProxyTestRequest(BaseModel):
+    http_proxy_url: str
+    http_proxy_username: Optional[str] = ""
+    http_proxy_password: Optional[str] = ""
+
+
+class ProxyTestResponse(BaseModel):
+    ok: bool
+    message: str
+    latency_ms: Optional[int] = None
 
 
 @router.get("", response_model=SettingsResponse)
@@ -71,8 +92,11 @@ async def get_settings(
         default_currency=s.default_currency or "USD",
         usd_to_toman_rate=s.usd_to_toman_rate or 0.0,
         proxy_base_url=s.proxy_base_url or "",
-        require_proxy_auth=bool(s.require_proxy_auth),
         db_size_bytes=_db_size_bytes(),
+        http_proxy_enabled=bool(s.http_proxy_enabled),
+        http_proxy_url=s.http_proxy_url or "",
+        http_proxy_username=s.http_proxy_username or "",
+        http_proxy_password=s.http_proxy_password or "",
     )
 
 
@@ -101,8 +125,11 @@ async def update_settings(
         default_currency=s.default_currency or "USD",
         usd_to_toman_rate=s.usd_to_toman_rate or 0.0,
         proxy_base_url=s.proxy_base_url or "",
-        require_proxy_auth=bool(s.require_proxy_auth),
         db_size_bytes=_db_size_bytes(),
+        http_proxy_enabled=bool(s.http_proxy_enabled),
+        http_proxy_url=s.http_proxy_url or "",
+        http_proxy_username=s.http_proxy_username or "",
+        http_proxy_password=s.http_proxy_password or "",
     )
 
 
@@ -122,3 +149,36 @@ async def change_password(
 
     s.admin_password_hash = pwd_context.hash(body.new_password)
     await session.commit()
+
+
+@router.post("/test-proxy", response_model=ProxyTestResponse)
+async def test_proxy(
+    body: ProxyTestRequest,
+    _: str = Depends(get_current_user),
+):
+    import httpx
+
+    url = (body.http_proxy_url or "").strip()
+    if not url:
+        return ProxyTestResponse(ok=False, message="Proxy URL is empty")
+
+    username = (body.http_proxy_username or "").strip()
+    password = (body.http_proxy_password or "").strip()
+    if username:
+        parsed = urlparse(url)
+        netloc = f"{username}:{password}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        url = urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
+
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(proxy=url, timeout=10) as client:
+            resp = await client.get("https://www.google.com")
+        latency = int((time.monotonic() - start) * 1000)
+        if resp.status_code < 400:
+            return ProxyTestResponse(ok=True, message=f"Connected via proxy — HTTP {resp.status_code}", latency_ms=latency)
+        return ProxyTestResponse(ok=False, message=f"Proxy returned HTTP {resp.status_code}", latency_ms=latency)
+    except Exception as e:
+        latency = int((time.monotonic() - start) * 1000)
+        return ProxyTestResponse(ok=False, message=str(e)[:200], latency_ms=latency)

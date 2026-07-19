@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Float, Boolean
+from sqlalchemy import String, Integer, Float
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
@@ -16,4 +16,7 @@ class AppSettings(Base):
     default_currency: Mapped[str] = mapped_column(String(8), default="USD")
     usd_to_toman_rate: Mapped[float] = mapped_column(Float, default=0.0)
     proxy_base_url: Mapped[str] = mapped_column(String(512), default="")
-    require_proxy_auth: Mapped[bool] = mapped_column(Boolean, default=False)
+    http_proxy_enabled: Mapped[bool] = mapped_column(default=False)
+    http_proxy_url: Mapped[str] = mapped_column(String(512), default="")
+    http_proxy_username: Mapped[str] = mapped_column(String(255), default="")
+    http_proxy_password: Mapped[str] = mapped_column(String(255), default="")

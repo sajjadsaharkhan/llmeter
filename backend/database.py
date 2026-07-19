@@ -32,13 +32,16 @@ async def _migrate_db():
         ("app_settings", "default_currency", "VARCHAR(8) DEFAULT 'USD'"),
         ("app_settings", "usd_to_toman_rate", "FLOAT DEFAULT 0.0"),
         ("app_settings", "proxy_base_url", "VARCHAR(512) DEFAULT ''"),
-        ("app_settings", "require_proxy_auth", "BOOLEAN DEFAULT 0"),
         ("providers", "last_test_at", "DATETIME"),
         ("providers", "last_test_ok", "BOOLEAN"),
         ("providers", "last_test_message", "VARCHAR(256)"),
         ("providers", "last_test_latency_ms", "INTEGER"),
         ("providers", "models_response", "JSON"),
         ("request_logs", "route", "VARCHAR(256)"),
+        ("app_settings", "http_proxy_enabled", "BOOLEAN DEFAULT 0"),
+        ("app_settings", "http_proxy_url", "VARCHAR(512) DEFAULT ''"),
+        ("app_settings", "http_proxy_username", "VARCHAR(255) DEFAULT ''"),
+        ("app_settings", "http_proxy_password", "VARCHAR(255) DEFAULT ''"),
     ]
     async with engine.connect() as conn:
         for table, col, definition in new_columns:

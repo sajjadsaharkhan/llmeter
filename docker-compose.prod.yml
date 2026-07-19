@@ -1,28 +1,32 @@
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Differences from base compose:
+#   - Pulls pre-built images from GHCR instead of building locally
+#   - SQLite data stored as bind-mount in ./data for easy backup
+#   - JSON log driver with rotation on all services
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-ghcr-image: &ghcr-repo ghcr.io/sajjadsaharkhan/llmeter
+
 services:
   backend:
-    image: ghcr.io/sajjadsaharkhan/llmeter/backend:main
-    ports:
-      - "8000:8000"
-    env_file: .env
-    environment:
-      DATABASE_URL: sqlite+aiosqlite:///./data/llmeter.db
+    image: "${GHCR_REPO:-ghcr.io/sajjadsaharkhan/llmeter}/backend:${IMAGE_TAG:-main}"
+    build: null
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes:
-      - ./data:/app/data
-    restart: always
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      - ./data:/app/data   # bind-mount so the SQLite file lives on the host
+    logging: *default-logging
 
   frontend:
-    image: ghcr.io/sajjadsaharkhan/llmeter/frontend:main
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: always
+    image: "${GHCR_REPO:-ghcr.io/sajjadsaharkhan/llmeter}/frontend:${IMAGE_TAG:-main}"
+    build: null
+    logging: *default-logging
+
+  nginx:
+    logging: *default-logging

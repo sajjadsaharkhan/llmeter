@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -112,6 +112,11 @@ export const api = {
     request<void>("/api/settings/password", {
       method: "POST",
       body: JSON.stringify({ current_password, new_password }),
+    }),
+  testProxy: (http_proxy_url: string, http_proxy_username?: string, http_proxy_password?: string) =>
+    request<{ ok: boolean; message: string; latency_ms?: number }>("/api/settings/test-proxy", {
+      method: "POST",
+      body: JSON.stringify({ http_proxy_url, http_proxy_username, http_proxy_password }),
     }),
 
   // Tokens
@@ -267,8 +272,11 @@ export interface AppSettings {
   default_currency: string;
   usd_to_toman_rate: number;
   proxy_base_url: string;
-  require_proxy_auth: boolean;
   db_size_bytes: number;
+  http_proxy_enabled: boolean;
+  http_proxy_url: string;
+  http_proxy_username: string;
+  http_proxy_password: string;
 }
 
 export interface ApiToken {

@@ -10,22 +10,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import httpx
 
+from urllib.parse import urlparse, urlunparse
+
 from database import get_session
 from models.provider import Provider
 from models.request_log import RequestLog
-from models.settings import AppSettings
 from models.api_token import ApiToken
+from models.settings import AppSettings
 from services.load_balancer import select_provider, get_fallback_providers
 from services.cost_calculator import calculate_cost
 from services.crypto import decrypt
-from routers.auth import get_current_user
-
 router = APIRouter(prefix="/v1", tags=["proxy"])
 
 
-async def _check_proxy_auth(request: Request, session: AsyncSession, app_settings: AppSettings | None) -> None:
-    if not app_settings or not getattr(app_settings, "require_proxy_auth", False):
-        return
+def _build_proxy_url(settings: AppSettings | None) -> str | None:
+    if not settings or not settings.http_proxy_enabled:
+        return None
+    url = (settings.http_proxy_url or "").strip()
+    if not url:
+        return None
+    username = (settings.http_proxy_username or "").strip()
+    password = (settings.http_proxy_password or "").strip()
+    if username:
+        parsed = urlparse(url)
+        netloc = f"{username}:{password}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        url = urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
+    return url
+
+
+async def _check_proxy_auth(request: Request, session: AsyncSession) -> None:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Proxy authentication required. Provide a Bearer token.")
@@ -76,6 +91,7 @@ async def _proxy_request(
     session: AsyncSession,
     request_id: str,
     route: str = "",
+    http_proxy: str | None = None,
 ):
     api_key = decrypt(provider.api_key_encrypted)
     target_url = provider.base_url.rstrip("/") + "/" + path.lstrip("/")
@@ -100,7 +116,7 @@ async def _proxy_request(
     completion_tokens = 0
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, proxy=http_proxy) as client:
             dns_ms = random.randint(2, 15)
             tls_ms = random.randint(20, 80)
 
@@ -322,8 +338,8 @@ async def proxy_chat(request: Request, session: AsyncSession = Depends(get_sessi
     if not providers:
         raise HTTPException(status_code=503, detail="No active providers configured")
 
+    await _check_proxy_auth(request, session)
     app_settings = await _get_settings(session)
-    await _check_proxy_auth(request, session, app_settings)
     timeout = app_settings.proxy_timeout_seconds if app_settings else 60
     max_retries = app_settings.proxy_max_retries if app_settings else 3
 
@@ -332,6 +348,7 @@ async def proxy_chat(request: Request, session: AsyncSession = Depends(get_sessi
     if not provider:
         raise HTTPException(status_code=503, detail="No providers available for routing")
 
+    http_proxy = _build_proxy_url(app_settings)
     tried = {provider.id}
     for attempt in range(max_retries):
         try:
@@ -344,6 +361,7 @@ async def proxy_chat(request: Request, session: AsyncSession = Depends(get_sessi
                 session=session,
                 request_id=request_id,
                 route="/v1/chat/completions",
+                http_proxy=http_proxy,
             )
         except HTTPException as e:
             if e.status_code in (429, 500, 502, 503) and attempt < max_retries - 1:
@@ -367,8 +385,8 @@ async def proxy_generic(path: str, request: Request, session: AsyncSession = Dep
     if not providers:
         raise HTTPException(status_code=503, detail="No active providers configured")
 
+    await _check_proxy_auth(request, session)
     app_settings = await _get_settings(session)
-    await _check_proxy_auth(request, session, app_settings)
     timeout = app_settings.proxy_timeout_seconds if app_settings else 60
 
     provider = select_provider(providers)
@@ -376,6 +394,7 @@ async def proxy_generic(path: str, request: Request, session: AsyncSession = Dep
         raise HTTPException(status_code=503, detail="No providers available")
 
     request_id = "req_" + uuid.uuid4().hex[:16]
+    http_proxy = _build_proxy_url(app_settings)
     return await _proxy_request(
         method=request.method,
         path=path,
@@ -385,4 +404,5 @@ async def proxy_generic(path: str, request: Request, session: AsyncSession = Dep
         session=session,
         request_id=request_id,
         route=f"/v1/{path.lstrip('/')}",
+        http_proxy=http_proxy,
     )
