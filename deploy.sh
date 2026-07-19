@@ -78,7 +78,7 @@ $COMPOSE up -d --no-build --remove-orphans
 # ── Wait for services to become healthy (via nginx) ───────────────────────────
 echo "▶ Waiting for services to become healthy..."
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:8090/health > /dev/null 2>&1; then
+  if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
     echo "▶ Services are healthy ✓"
     break
   fi
@@ -97,6 +97,6 @@ docker image prune -f
 
 echo ""
 echo "✓ Deployment complete — tag: ${IMAGE_TAG}"
-echo "  Admin UI:  http://localhost:8090"
-echo "  LLM Proxy: http://localhost:8090/proxy/v1"
+echo "  Admin UI:  http://localhost:3000"
+echo "  LLM Proxy: http://localhost:3000/proxy/v1"
 echo ""

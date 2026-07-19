@@ -35,7 +35,7 @@ fi
 # ── Defaults ──────────────────────────────────────────────────────────────────
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-changeme}"
-CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:8090}"
+CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:3000}"
 
 # Auto-generate secrets if missing or still set to placeholder values
 _is_placeholder() {
@@ -92,7 +92,7 @@ esac
 if [ "$MODE" != "down" ]; then
   echo ""
   info "Services are up:"
-  echo -e "  Admin UI   → ${BOLD}http://localhost:8090${RESET}"
-  echo -e "  LLM Proxy  → ${BOLD}http://localhost:8090/proxy/v1${RESET}"
+  echo -e "  Admin UI   → ${BOLD}http://localhost:3000${RESET}"
+  echo -e "  LLM Proxy  → ${BOLD}http://localhost:3000/proxy/v1${RESET}"
   echo -e "  Login      → ${BOLD}${ADMIN_USERNAME}${RESET} / ${BOLD}${ADMIN_PASSWORD}${RESET}"
 fi
